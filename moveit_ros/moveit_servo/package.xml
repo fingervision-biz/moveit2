@@ -24,6 +24,7 @@
   <depend>moveit_common</depend>
 
   <depend>control_msgs</depend>
+  <depend>fv_servo_msgs</depend>
   <depend>generate_parameter_library</depend>
   <depend>geometry_msgs</depend>
   <depend>moveit_core</depend>

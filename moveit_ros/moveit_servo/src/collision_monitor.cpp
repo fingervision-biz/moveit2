@@ -52,12 +52,20 @@ rclcpp::Logger getLogger()
 }  // namespace
 
 CollisionMonitor::CollisionMonitor(const planning_scene_monitor::PlanningSceneMonitorPtr& planning_scene_monitor,
-                                   const servo::Params& servo_params, std::atomic<double>& collision_velocity_scale)
+                                   const servo::Params& servo_params, std::atomic<double>& collision_velocity_scale,
+                                   const rclcpp::Node::SharedPtr& node)
   : servo_params_(servo_params)
   , planning_scene_monitor_(planning_scene_monitor)
   , robot_state_(planning_scene_monitor->getPlanningScene()->getCurrentState())
   , collision_velocity_scale_(collision_velocity_scale)
+  , node_(node)
 {
+  if (node_)
+  {
+    collision_state_pub_ =
+        node_->create_publisher<fv_servo_msgs::msg::ServoCollisionState>("~/collision_state", rclcpp::SystemDefaultsQoS());
+  }
+
   scene_collision_request_.distance = true;
   scene_collision_request_.group_name = servo_params.move_group_name;
 
@@ -135,9 +143,10 @@ void CollisionMonitor::checkCollisions()
       // intermediate values in this loop or they can be picked up and throw off scaling while processing
       // joint updates.
 
+      double velocity_scale = 1.0;
       if (self_collision_result_.collision || scene_collision_result_.collision)
       {
-        collision_velocity_scale_ = 0.0;
+        velocity_scale = 0.0;
       }
       else
       {
@@ -162,8 +171,11 @@ void CollisionMonitor::checkCollisions()
         }
 
         // Use the scaling factor with lower value, i.e maximum scale down.
-        collision_velocity_scale_ = std::min(scene_collision_scale, self_collision_scale);
+        velocity_scale = std::min(scene_collision_scale, self_collision_scale);
       }
+      // Set once (see the note above)
+      collision_velocity_scale_ = velocity_scale;
+      publishCollisionState(velocity_scale);
     }
     else
     {
@@ -173,5 +185,28 @@ void CollisionMonitor::checkCollisions()
 
     rate.sleep();
   }
+}
+
+void CollisionMonitor::publishCollisionState(double velocity_scale)
+{
+  if (!collision_state_pub_)
+  {
+    return;
+  }
+  fv_servo_msgs::msg::ServoCollisionState msg;
+  msg.header.stamp = node_->now();
+  msg.group_name = servo_params_.move_group_name;
+  msg.joint_state.header = msg.header;
+  msg.joint_state.name = robot_state_.getVariableNames();
+  const double* positions = robot_state_.getVariablePositions();
+  msg.joint_state.position.assign(positions, positions + robot_state_.getVariableCount());
+  msg.scene_collision = scene_collision_result_.collision;
+  msg.self_collision = self_collision_result_.collision;
+  msg.scene_distance = scene_collision_result_.distance;
+  msg.self_distance = self_collision_result_.distance;
+  msg.scene_proximity_threshold = servo_params_.scene_collision_proximity_threshold;
+  msg.self_proximity_threshold = servo_params_.self_collision_proximity_threshold;
+  msg.velocity_scale = velocity_scale;
+  collision_state_pub_->publish(msg);
 }
 }  // namespace moveit_servo

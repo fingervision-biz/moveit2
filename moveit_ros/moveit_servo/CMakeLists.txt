@@ -7,6 +7,7 @@ moveit_package()
 
 set(THIS_PACKAGE_INCLUDE_DEPENDS
     control_msgs
+    fv_servo_msgs
     geometry_msgs
     moveit_core
     moveit_msgs

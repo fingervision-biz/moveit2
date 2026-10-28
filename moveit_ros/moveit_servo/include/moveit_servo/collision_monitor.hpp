@@ -44,6 +44,8 @@
 #include <moveit/planning_scene_monitor/planning_scene_monitor.hpp>
 #include <moveit/planning_scene/planning_scene.hpp>
 #include <moveit_servo/moveit_servo_lib_parameters.hpp>
+#include <fv_servo_msgs/msg/servo_collision_state.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 namespace moveit_servo
 {
@@ -51,8 +53,13 @@ namespace moveit_servo
 class CollisionMonitor
 {
 public:
+  /**
+   * \brief Create the monitor; with a node, each check is published on ~/collision_state
+   * (fv_servo_msgs/ServoCollisionState, FingerVision's addition).
+   */
   CollisionMonitor(const planning_scene_monitor::PlanningSceneMonitorPtr& planning_scene_monitor,
-                   const servo::Params& servo_params, std::atomic<double>& collision_velocity_scale);
+                   const servo::Params& servo_params, std::atomic<double>& collision_velocity_scale,
+                   const rclcpp::Node::SharedPtr& node = nullptr);
 
   void start();
 
@@ -63,6 +70,11 @@ private:
    * \brief The collision checking function, this will run in a separate thread.
    */
   void checkCollisions();
+
+  /**
+   * \brief Publish the last check's results and the state it checked (no-op without a node).
+   */
+  void publishCollisionState(double velocity_scale);
 
   // Variables
 
@@ -85,6 +97,10 @@ private:
   // The data structures used to get information about robot collision with other objects in the collision scene.
   collision_detection::CollisionRequest scene_collision_request_;
   collision_detection::CollisionResult scene_collision_result_;
+
+  // Where each check is published (FingerVision); null without a node.
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::Publisher<fv_servo_msgs::msg::ServoCollisionState>::SharedPtr collision_state_pub_;
 };
 
 }  // namespace moveit_servo
